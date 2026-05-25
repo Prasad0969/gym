@@ -1,5 +1,5 @@
 // Bump on every release so iOS picks up new content
-const CACHE = "gym-pwa-v1";
+const CACHE = "gym-pwa-v2";
 
 const PRECACHE = [
   "./",

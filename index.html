@@ -472,15 +472,7 @@ const MONTH_NAME_SHORT = _now.toLocaleString('en-US', { month: 'short' }).toUppe
 const DAY_LABELS = ['M','T','W','T','F','S','S'];
 
 // ---------- Mock attendance (last ~10 days) ----------
-const ATTENDANCE = (() => {
-  const a = {};
-  const pattern = ['went','went','went','went','skipped','went','went','went','went','went'];
-  for (let i = 0; i < pattern.length; i++) {
-    const d = TODAY - i;
-    if (d >= 1) a[d] = pattern[i];
-  }
-  return a;
-})();
+const ATTENDANCE = {}; // date -> 'went' | 'skipped' | 'rest' (loaded from localStorage)
 
 // ---------- User profile + goals ----------
 const USER = { name: 'Alex', height: 179, appTitle: 'GYM' };
@@ -543,16 +535,9 @@ const MEAL_TEMPLATE = {
 
 // Per-date log: which template items were eaten + any one-off extras for that day.
 // MEAL_LOG[date][mealKey] = { eaten: {templateIdx: true}, extras: [{name, kcal}] }
-const MEAL_LOG = {
-  [TODAY]: {
-    breakfast: { eaten: { 0: true, 1: true }, extras: [] },
-    lunch:     { eaten: { 0: true },          extras: [] },
-    dinner:    { eaten: {},                   extras: [] },
-    snacks:    { eaten: { 0: true, 1: true }, extras: [] },
-  }
-};
+const MEAL_LOG = {}; // date -> { mealKey: { eaten: { idx: true }, extras: [...] } }
 
-const HYDRATION = { [TODAY]: 4 }; // date -> 0.5L units consumed
+const HYDRATION = {}; // date -> 0.5L units consumed
 
 // ---------- Date helpers (ISO YYYY-MM-DD in local time) ----------
 function localIso(date) {
@@ -570,27 +555,8 @@ function formatIsoShort(iso) {
   return `${m[d.getMonth()]} ${d.getDate()}`;
 }
 
-// ---------- Weight entries (mocked spanning ~1 year for graph variety) ----------
-const WEIGHTS = (() => {
-  const points = [
-    { daysAgo: 365, kg: 78.0 },
-    { daysAgo: 270, kg: 76.8 },
-    { daysAgo: 200, kg: 75.9 },
-    { daysAgo: 150, kg: 75.0 },
-    { daysAgo: 100, kg: 74.4 },
-    { daysAgo: 60, kg: 74.0 },
-    { daysAgo: 30, kg: 73.5 },
-    { daysAgo: 21, kg: 73.3 },
-    { daysAgo: 14, kg: 73.0 },
-    { daysAgo: 10, kg: 72.8 },
-    { daysAgo: 7, kg: 72.7 },
-    { daysAgo: 5, kg: 72.6 },
-    { daysAgo: 3, kg: 72.5 },
-    { daysAgo: 1, kg: 72.5 },
-    { daysAgo: 0, kg: 72.4 },
-  ];
-  return points.map(p => ({ iso: isoDaysAgo(p.daysAgo), kg: p.kg }));
-})();
+// ---------- Weight entries (loaded from localStorage; user adds via Weight tab) ----------
+const WEIGHTS = []; // [{ iso, kg }]
 
 // ---------- Day notes ----------
 const NOTES = {}; // date -> string
@@ -1221,28 +1187,7 @@ function dayKeyForDate(date) {
 
 // WORKOUT_LOG[date] = { workoutKey, completed: { exerciseIndex: true }, sets: { exerciseIndex: [{weight,reps}] } }
 // Mock the last several days relative to TODAY.
-const WORKOUT_LOG = (() => {
-  const log = {};
-  const recipe = [
-    { offset: 6, key: 'push', completed: [0,1,2,3,4],
-      sets: { 0: [{weight:60,reps:8},{weight:65,reps:6},{weight:70,reps:5}],
-              1: [{weight:40,reps:10},{weight:45,reps:8}] } },
-    { offset: 5, key: 'pull', completed: [0,1,2] },
-    { offset: 4, key: 'legs', completed: [0,1,2,3,4],
-      sets: { 0: [{weight:80,reps:6},{weight:90,reps:5},{weight:95,reps:5}] } },
-    { offset: 2, key: 'push', completed: [0,1] },
-  ];
-  recipe.forEach(({offset, key, completed, sets}) => {
-    const d = TODAY - offset;
-    if (d >= 1) {
-      const c = {};
-      completed.forEach(i => c[i] = true);
-      log[d] = { workoutKey: key, completed: c };
-      if (sets) log[d].sets = sets;
-    }
-  });
-  return log;
-})();
+const WORKOUT_LOG = {}; // date -> { workoutKey, completed: { idx: true }, sets: { idx: [{weight, reps}] } }
 
 let selectedDate = TODAY;
 
@@ -1794,15 +1739,7 @@ function addNewWorkout() {
   renderWorkoutTypes();
 }
 
-const DIET_ATTENDANCE = (() => {
-  const a = {};
-  const pattern = ['done','done','done','missed','done','done','done','done','missed','done'];
-  for (let i = 0; i < pattern.length; i++) {
-    const d = TODAY - i;
-    if (d >= 1) a[d] = pattern[i];
-  }
-  return a;
-})();
+const DIET_ATTENDANCE = {}; // date -> 'done' | 'missed'
 
 let selectedDietDate = TODAY;
 
@@ -2637,6 +2574,60 @@ document.getElementById('backBtn').addEventListener('click', () => {
   else if (current.id === 'screen-settings') show(previousScreen);
   else show('home');
 });
+
+// ---------- localStorage persistence (load before first render, save on every change) ----------
+const PWA_STORAGE_KEY = 'gymt-state-v1';
+function persistState() {
+  try {
+    localStorage.setItem(PWA_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      user: USER,
+      goals: GOALS,
+      attendance: ATTENDANCE,
+      dietAttendance: DIET_ATTENDANCE,
+      workouts: WORKOUTS,
+      regimeDefault: REGIME_DEFAULT,
+      workoutLog: WORKOUT_LOG,
+      mealTemplate: MEAL_TEMPLATE,
+      mealLog: MEAL_LOG,
+      hydration: HYDRATION,
+      weights: WEIGHTS,
+      notes: NOTES,
+    }));
+  } catch (_) { /* quota / private mode — ignore */ }
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(PWA_STORAGE_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    const replaceObj = (target, src) => {
+      Object.keys(target).forEach(k => delete target[k]);
+      if (src) Object.assign(target, src);
+    };
+    if (d.user) Object.assign(USER, d.user);
+    if (d.goals) Object.assign(GOALS, d.goals);
+    replaceObj(ATTENDANCE, d.attendance);
+    replaceObj(DIET_ATTENDANCE, d.dietAttendance);
+    replaceObj(WORKOUTS, d.workouts);
+    if (!WORKOUTS.rest) WORKOUTS.rest = { name: 'Rest', exercises: [] };
+    replaceObj(REGIME_DEFAULT, d.regimeDefault);
+    replaceObj(WORKOUT_LOG, d.workoutLog);
+    replaceObj(MEAL_TEMPLATE, d.mealTemplate);
+    replaceObj(MEAL_LOG, d.mealLog);
+    replaceObj(HYDRATION, d.hydration);
+    replaceObj(NOTES, d.notes);
+    WEIGHTS.length = 0;
+    if (Array.isArray(d.weights)) WEIGHTS.push(...d.weights);
+  } catch (_) { /* corrupt JSON — fall back to defaults */ }
+}
+loadState();
+
+// Save when the tab is hidden (most reliable iOS hook), before unload, and every 3s as belt-and-suspenders.
+window.addEventListener('visibilitychange', persistState);
+window.addEventListener('pagehide', persistState);
+window.addEventListener('beforeunload', persistState);
+setInterval(persistState, 3000);
 
 renderCalendar();
 renderWeek();
