@@ -94,8 +94,11 @@ tailwind.config = {
 
 <!-- =================== SCREEN 1: HOME =================== -->
 <main id="screen-home" class="screen active pt-20 pb-28 px-5 space-y-7">
-  <section class="flex items-center justify-between">
-    <h2 class="text-2xl font-extrabold uppercase tracking-tighter">This Week</h2>
+  <section class="flex items-end justify-between">
+    <div>
+      <p id="homeDayName" class="text-[11px] font-bold text-muted tracking-widest leading-none mb-1">&nbsp;</p>
+      <h2 id="homeDateLabel" class="text-3xl font-black text-yellow uppercase tracking-tighter leading-none">&nbsp;</h2>
+    </div>
     <button onclick="show('month')" class="text-xs font-bold text-yellow tracking-widest active:scale-95 transition flex items-center gap-1">
       VIEW MONTH
       <span class="material-symbols-outlined text-base">chevron_right</span>
@@ -481,6 +484,15 @@ function renderAppTitle() {
   const el = document.getElementById('topTitle');
   if (!el) return;
   el.textContent = (USER.appTitle && USER.appTitle.trim()) || 'GYM';
+}
+
+function renderHomeDate() {
+  const dayEl = document.getElementById('homeDayName');
+  const dateEl = document.getElementById('homeDateLabel');
+  if (!dayEl || !dateEl) return;
+  const t = new Date();
+  dayEl.textContent = t.toLocaleString('en-US', { weekday: 'long' }).toUpperCase();
+  dateEl.textContent = t.toLocaleString('en-US', { month: 'long' }).toUpperCase() + ' ' + t.getDate();
 }
 const GOALS = { weightGoal: 68.0, kcalGoal: 2400, waterGoal: 7, restDaysPerWeek: 2 }; // waterGoal in 0.5L units; restDaysPerWeek 0..7
 
@@ -2651,7 +2663,11 @@ renderWeight();
 renderShareCard();
 renderDailyVerse();
 renderAppTitle();
+renderHomeDate();
 show('home');
+
+// Re-render date when tab becomes visible after midnight rollover.
+window.addEventListener('visibilitychange', () => { if (!document.hidden) renderHomeDate(); });
 
 // ---------- Swipe navigation between main tabs ----------
 const TAB_ORDER = ['home', 'weight', 'diet', 'workout'];
